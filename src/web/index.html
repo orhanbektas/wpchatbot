@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>WA Otomasyon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0e0f12;--s1:#141519;--s2:#1a1c22;--s3:#20222a;
+      --b1:#252830;--b2:#2e3140;
+      --amber:#f0a500;--amber2:#ffc444;--amberg:rgba(240,165,0,.1);
+      --red:#e05555;--green:#3ec97a;--blue:#5b8def;--purple:#9b7dea;
+      --t1:#eceef5;--t2:#9499a8;--t3:#52566a;
+      --r:6px;
+      --font:'Sora',sans-serif;--mono:'JetBrains Mono',monospace;
+    }
+    html,body{height:100%;-webkit-font-smoothing:antialiased}
+    body{background:var(--bg);color:var(--t1);font-family:var(--font);font-size:13px;line-height:1.6}
+
+    /* ── Shell ── */
+    .shell{display:flex;height:100vh;overflow:hidden}
+
+    /* ── Sidebar ── */
+    .sidebar{
+      width:220px;min-width:220px;
+      background:var(--s1);
+      border-right:1px solid var(--b1);
+      display:flex;flex-direction:column;
+      position:relative;
+    }
+    .sidebar::after{
+      content:'';position:absolute;top:0;right:0;width:1px;height:100%;
+      background:linear-gradient(to bottom,transparent 0%,var(--amber) 50%,transparent 100%);
+      opacity:.2;pointer-events:none;
+    }
+    .brand{
+      padding:20px 16px 16px;
+      border-bottom:1px solid var(--b1);
+      display:flex;align-items:center;gap:10px;
+    }
+    .brand-icon{
+      width:34px;height:34px;background:var(--amber);border-radius:8px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:17px;color:#111;flex-shrink:0;
+      box-shadow:0 0 16px rgba(240,165,0,.3);
+    }
+    .brand-name{font-size:14px;font-weight:700;letter-spacing:-.3px}
+    .brand-ver{font-size:10px;color:var(--t3);font-family:var(--mono);letter-spacing:.5px;margin-top:1px}
+
+    nav{padding:8px;flex:1;overflow-y:auto}
+    .nav-sect{font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:1px;padding:12px 10px 5px}
+    .nav-item{
+      display:flex;align-items:center;gap:9px;
+      padding:9px 10px;border-radius:var(--r);
+      cursor:pointer;color:var(--t2);font-size:12.5px;font-weight:500;
+      transition:all .15s;position:relative;margin-bottom:1px;
+    }
+    .nav-item:hover{color:var(--t1);background:var(--s2)}
+    .nav-item.active{color:var(--amber);background:var(--amberg)}
+    .nav-item.active::before{
+      content:'';position:absolute;left:0;top:25%;height:50%;
+      width:2px;background:var(--amber);border-radius:0 2px 2px 0;
+    }
+    .ni{width:16px;text-align:center;font-size:14px;flex-shrink:0}
+
+    .sb-foot{
+      padding:12px 14px;border-top:1px solid var(--b1);
+      display:flex;align-items:center;gap:8px;
+    }
+    .dot{width:7px;height:7px;border-radius:50%;background:var(--b2);flex-shrink:0;transition:all .3s}
+    .dot.ready{background:var(--green);box-shadow:0 0 8px var(--green)}
+    .dot.connecting{background:var(--amber);animation:pulse 1.2s ease-in-out infinite}
+    .dot.failed{background:var(--red)}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    .sb-state{font-size:11px;font-family:var(--mono);color:var(--t2)}
+
+    /* ── Main ── */
+    .main{flex:1;overflow-y:auto;background:var(--bg)}
+    .main::-webkit-scrollbar{width:4px}
+    .main::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+
+    .page{display:none;padding:28px 30px;max-width:1080px;animation:fadeUp .2s ease}
+    .page.active{display:block}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+    /* ── Page header ── */
+    .ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px}
+    .ph h1{font-size:19px;font-weight:700;letter-spacing:-.5px}
+    .ph p{font-size:12px;color:var(--t2);margin-top:3px}
+    .ph-r{display:flex;gap:8px;align-items:center}
+
+    /* ── Stats ── */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;margin-bottom:20px}
+    .sc{
+      background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);
+      padding:15px;position:relative;overflow:hidden;
+    }
+    .sc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+    .sc.a::after{background:linear-gradient(90deg,var(--amber),transparent)}
+    .sc.g::after{background:linear-gradient(90deg,var(--green),transparent)}
+    .sc.r::after{background:linear-gradient(90deg,var(--red),transparent)}
+    .sc.b::after{background:linear-gradient(90deg,var(--blue),transparent)}
+    .sc.p::after{background:linear-gradient(90deg,var(--purple),transparent)}
+    .sc-lbl{font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.7px;color:var(--t3);margin-bottom:7px}
+    .sc-val{font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-1px}
+    .sc-val.a{color:var(--amber)}.sc-val.g{color:var(--green)}.sc-val.r{color:var(--red)}.sc-val.b{color:var(--blue)}.sc-val.p{color:var(--purple)}
+
+    /* ── Card ── */
+    .card{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:18px;margin-bottom:14px}
+    .card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--b1)}
+    .card-ttl{font-size:11px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.8px;color:var(--t3)}
+
+    /* ── Buttons ── */
+    .btn{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:8px 15px;border-radius:var(--r);
+      border:none;cursor:pointer;font-family:var(--font);
+      font-size:12px;font-weight:600;transition:all .15s;white-space:nowrap;
+    }
+    .btn-p{background:var(--amber);color:#111}
+    .btn-p:hover{background:var(--amber2);box-shadow:0 0 16px rgba(240,165,0,.25)}
+    .btn-g{background:var(--s3);color:var(--t1);border:1px solid var(--b2)}
+    .btn-g:hover{border-color:var(--amber);color:var(--amber)}
+    .btn-d{background:rgba(224,85,85,.12);color:var(--red);border:1px solid rgba(224,85,85,.2)}
+    .btn-d:hover{background:rgba(224,85,85,.2)}
+    .btn-s{background:rgba(62,201,122,.12);color:var(--green);border:1px solid rgba(62,201,122,.2)}
+    .btn-s:hover{background:rgba(62,201,122,.2)}
+    .btn-w{background:rgba(240,165,0,.12);color:var(--amber);border:1px solid rgba(240,165,0,.2)}
+    .btn-w:hover{background:rgba(240,165,0,.2)}
+    .sm{padding:5px 10px;font-size:11px}
+    .btn:disabled{opacity:.35;cursor:not-allowed}
+
+    /* ── Forms ── */
+    .fg{margin-bottom:13px}
+    .fl{display:block;font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.7px;color:var(--t3);margin-bottom:5px}
+    .fi,.fs,.fta{
+      width:100%;background:var(--bg);border:1px solid var(--b1);border-radius:var(--r);
+      color:var(--t1);font-family:var(--font);font-size:13px;padding:8px 11px;
+      transition:border-color .15s,box-shadow .15s;outline:none;
+    }
+    .fi:focus,.fs:focus,.fta:focus{border-color:var(--amber);box-shadow:0 0 0 3px var(--amberg)}
+    .fs option{background:var(--s2)}
+    .fta{resize:vertical;min-height:108px}
+    .frow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .fhint{font-size:10px;color:var(--t3);margin-top:4px;font-family:var(--mono)}
+
+    /* ── Table ── */
+    .twrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    thead tr{border-bottom:2px solid var(--b1)}
+    th{text-align:left;padding:8px 12px;font-size:10px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.7px;color:var(--t3)}
+    td{padding:9px 12px;border-bottom:1px solid var(--b1);font-size:12.5px}
+    tbody tr:last-child td{border-bottom:none}
+    tbody tr:hover td{background:var(--s2)}
+
+    /* ── Badge ── */
+    .badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600;font-family:var(--mono);letter-spacing:.3px}
+    .ba{background:rgba(240,165,0,.12);color:var(--amber)}
+    .bg{background:rgba(62,201,122,.12);color:var(--green)}
+    .br{background:rgba(224,85,85,.12);color:var(--red)}
+    .bb{background:rgba(91,141,239,.12);color:var(--blue)}
+    .bgr{background:rgba(148,153,168,.08);color:var(--t3)}
+
+    /* ── Upload ── */
+    .upz{
+      border:1.5px dashed var(--b2);border-radius:var(--r);
+      padding:32px 20px;text-align:center;cursor:pointer;
+      transition:all .2s;
+    }
+    .upz:hover,.upz.drag{border-color:var(--amber);background:var(--amberg)}
+    .upz input{display:none}
+    .up-icon{font-size:30px;margin-bottom:10px;opacity:.5}
+    .up-ttl{font-size:14px;font-weight:600;margin-bottom:4px}
+    .up-sub{font-size:11px;color:var(--t3);font-family:var(--mono)}
+
+    /* ── Alert ── */
+    .alert{padding:10px 13px;border-radius:var(--r);font-size:12px;margin-bottom:12px;font-family:var(--mono)}
+    .al-ok{background:rgba(62,201,122,.08);border:1px solid rgba(62,201,122,.2);color:var(--green)}
+    .al-err{background:rgba(224,85,85,.08);border:1px solid rgba(224,85,85,.2);color:var(--red)}
+    .al-warn{background:rgba(240,165,0,.08);border:1px solid rgba(240,165,0,.2);color:var(--amber)}
+
+    /* ── QR ── */
+    .qr-wrap{display:flex;flex-direction:column;align-items:center;padding:36px 20px}
+    #qr-box{width:252px;height:252px;background:#fff;border-radius:10px;padding:11px;display:none}
+    .qr-ph{text-align:center}
+    .qr-ph-icon{font-size:52px;opacity:.2;margin-bottom:12px}
+    .qr-ph-txt{font-size:12px;color:var(--t3)}
+    #qr-ok{display:none;text-align:center}
+    .qr-ok-icon{font-size:52px;margin-bottom:10px}
+    .qr-ok-txt{font-size:15px;font-weight:700;color:var(--green)}
+    .qr-hint{margin-top:12px;font-size:11px;color:var(--t3);font-family:var(--mono)}
+    .qr-btns{display:flex;gap:10px;margin-top:20px}
+
+    .qr-spinner{
+      width:44px;height:44px;border-radius:50%;
+      border:3px solid var(--b2);
+      border-top-color:var(--amber);
+      animation:spin 1s linear infinite;
+      margin:0 auto;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Progress ── */
+    .prog{height:3px;background:var(--b1);border-radius:2px;overflow:hidden}
+    .prog-bar{height:100%;background:var(--amber);border-radius:2px;transition:width .4s}
+
+    /* ── Campaign card ── */
+    .cc{background:var(--s1);border:1px solid var(--b1);border-radius:var(--r);padding:16px;margin-bottom:10px;transition:border-color .15s}
+    .cc:hover{border-color:var(--b2)}
+    .cc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .cc-name{font-size:13.5px;font-weight:600}
+    .cc-meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:11px}
+    .cc-ml{font-size:10px;color:var(--t3);font-family:var(--mono);text-transform:uppercase;margin-bottom:3px}
+    .cc-mv{font-size:18px;font-weight:700;font-family:var(--mono)}
+
+    /* ── Log ── */
+    .lr{display:flex;gap:10px;align-items:baseline;padding:5px 12px;border-bottom:1px solid var(--b1);font-family:var(--mono);font-size:11px}
+    .lr:hover{background:var(--s2)}
+    .lr:last-child{border-bottom:none}
+    .lt{color:var(--t3);min-width:128px}
+    .ll{min-width:42px;font-weight:600}
+    .ll.info{color:var(--blue)}.ll.warn{color:var(--amber)}.ll.error{color:var(--red)}
+    .lc{color:var(--t3);min-width:78px}
+    .lm{color:var(--t1);flex:1;word-break:break-all}
+
+    /* ── Feed ── */
+    .feed{max-height:160px;overflow-y:auto;padding:4px 0}
+    .feed::-webkit-scrollbar{width:3px}
+    .feed::-webkit-scrollbar-thumb{background:var(--b2)}
+    .fr{display:flex;gap:8px;align-items:baseline;padding:3px 4px;font-family:var(--mono);font-size:11px}
+    .ft{color:var(--t3)}.fm.g{color:var(--green)}.fm.a{color:var(--amber)}.fm.n{color:var(--t2)}
+
+    /* ── Modal ── */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);z-index:200;display:flex;align-items:center;justify-content:center}
+    .overlay.hidden{display:none}
+    .modal{background:var(--s1);border:1px solid var(--b2);border-radius:10px;padding:22px;width:510px;max-width:96vw;max-height:90vh;overflow-y:auto}
+    .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    .mt{font-size:15px;font-weight:700}
+    .mc{background:none;border:none;color:var(--t3);cursor:pointer;font-size:22px;line-height:1;padding:0}
+    .mc:hover{color:var(--t1)}
+
+    /* ── Pager ── */
+    .pager{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:12px}
+    .pb{padding:4px 10px;background:var(--bg);border:1px solid var(--b1);border-radius:var(--r);color:var(--t2);cursor:pointer;font-family:var(--mono);font-size:11px}
+    .pb:hover{border-color:var(--amber);color:var(--amber)}
+    .pi{font-size:11px;font-family:var(--mono);color:var(--t3)}
+
+    /* ── Empty ── */
+    .empty{text-align:center;padding:50px 20px;color:var(--t3)}
+    .empty-icon{font-size:36px;opacity:.25;margin-bottom:10px}
+    .empty-txt{font-size:12px}
+
+    /* ── Divider ── */
+    .div{height:1px;background:var(--b1);margin:14px 0}
+
+    .r10-btn{
+      display:flex;align-items:center;gap:8px;
+      padding:10px 14px;
+      background:linear-gradient(135deg,#1a1c22,#16181f);
+      border-top:1px solid var(--b1);
+      color:var(--t2);font-size:12px;font-weight:600;
+      text-decoration:none;font-family:var(--mono);
+      transition:all .2s;
+    }
+    .r10-btn:hover{color:var(--amber);background:var(--amberg)}
+    .r10-btn:hover .r10-icon{background:var(--amber);color:#111;box-shadow:0 0 10px rgba(240,165,0,.4)}
+    .r10-icon{
+      width:22px;height:22px;border-radius:5px;
+      background:var(--b2);color:var(--t2);
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;font-weight:700;flex-shrink:0;
+      transition:all .2s;
+    }
+    /* ── Topbar ── */
+    .topbar{
+      height:48px;min-height:48px;
+      background:var(--s1);border-bottom:1px solid var(--b1);
+      display:flex;align-items:center;justify-content:flex-end;
+      padding:0 24px;gap:10px;
+    }
+    .r10-btn{
+      display:inline-flex;align-items:center;gap:7px;
+      padding:6px 12px;border-radius:var(--r);
+      background:var(--s3);border:1px solid var(--b2);
+      color:var(--t2);font-size:11px;font-weight:700;
+      text-decoration:none;font-family:var(--mono);
+      transition:all .2s;letter-spacing:.3px;
+    }
+    .r10-btn:hover{border-color:var(--amber);color:var(--amber);background:var(--amberg);box-shadow:0 0 12px var(--amberg)}
+    .r10-btn:hover .r10-icon{background:var(--amber);color:#111}
+    .r10-icon{
+      width:20px;height:20px;border-radius:4px;
+      background:var(--b2);color:var(--t2);
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;font-weight:800;flex-shrink:0;
+      transition:all .2s;
+    }
+    /* QR_PENDING → turuncu/kırmızı */
+    .sc-val.pending{color:var(--red);animation:blink2 1.5s ease-in-out infinite}
+    @keyframes blink2{0%,100%{opacity:1}50%{opacity:.4}}
+
+    .flex{display:flex}.ic{align-items:center}.jb{justify-content:space-between}
+    .g8{gap:8px}.g12{gap:12px}.mt12{margin-top:12px}.mb14{margin-bottom:14px}
+    .dim{color:var(--t2)}.xsm{font-size:11px;font-family:var(--mono)}
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">💬</div>
+      <div>
+        <div class="brand-name">WA Otomasyon</div>
+        <div class="brand-ver">v2.0 · LOKAL</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <div class="nav-sect">Genel</div>
+      <div class="nav-item active" data-page="dashboard"><span class="ni">◈</span>Gösterge Paneli</div>
+      <div class="nav-item" data-page="auth"><span class="ni">⬡</span>WhatsApp Bağlantı</div>
+      <div class="nav-sect">Mesajlaşma</div>
+      <div class="nav-item" data-page="contacts"><span class="ni">◉</span>Kişiler</div>
+      <div class="nav-item" data-page="send"><span class="ni">◎</span>Mesaj Gönder</div>
+      <div class="nav-item" data-page="campaigns"><span class="ni">◈</span>Kampanyalar</div>
+      <div class="nav-sect">Sistem</div>
+      <div class="nav-item" data-page="logs"><span class="ni">▤</span>Kayıtlar</div>
+      <div class="nav-item" data-page="settings"><span class="ni">◧</span>Ayarlar</div>
+    </nav>
+    <div class="sb-foot">
+      <div class="dot" id="sdot"></div>
+      <span class="sb-state" id="sstate">BAĞLI DEĞİL</span>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <a href="https://www.r10.net/profil/107948-orhanbektas.html" target="_blank" class="r10-btn">
+        <span class="r10-icon">R</span>
+        <span>R10 · @orhanbektas</span>
+      </a>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="page-dashboard" class="page active">
+      <div class="ph">
+        <div><h1>Gösterge Paneli</h1><p>Sistem özeti ve canlı kuyruk izleme</p></div>
+        <div class="ph-r">
+          <button class="btn btn-g sm" onclick="loadDashboard()">↻ Yenile</button>
+        </div>
+      </div>
+      <div class="stats" id="dash-stats">
+        <div class="sc b"><div class="sc-lbl">WA Durumu</div><div class="sc-val b" id="ds-state">—</div></div>
+        <div class="sc g"><div class="sc-lbl">Bugün Gönderildi</div><div class="sc-val g" id="ds-sent-today">—</div></div>
+        <div class="sc a"><div class="sc-lbl">Günlük Limit</div><div class="sc-val a" id="ds-limit">—</div></div>
+        <div class="sc p"><div class="sc-lbl">Sıra Bekleyen</div><div class="sc-val p" id="ds-queued">—</div></div>
+        <div class="sc g"><div class="sc-lbl">Toplam Gönderildi</div><div class="sc-val g" id="ds-total-sent">—</div></div>
+        <div class="sc r"><div class="sc-lbl">Başarısız</div><div class="sc-val r" id="ds-failed">—</div></div>
+        <div class="sc a"><div class="sc-lbl">Toplam Kişi</div><div class="sc-val" id="ds-contacts">—</div></div>
+        <div class="sc b"><div class="sc-lbl">Isınma Günü</div><div class="sc-val b" id="ds-warmup">—</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-ttl">Canlı Kuyruk</span>
+          <span class="xsm dim" id="feed-badge">—</span>
+        </div>
+        <div class="feed" id="live-feed"></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <span class="card-ttl">Son Gönderilen Mesajlar</span>
+          <button class="btn btn-g sm" onclick="loadRecentMessages()">↻</button>
+        </div>
+        <div class="twrap">
+          <table>
+            <thead><tr><th>Telefon</th><th>Mesaj</th><th>Durum</th><th>Tarih</th></tr></thead>
+            <tbody id="recent-msgs"><tr><td colspan="4" style="text-align:center;color:var(--t3)">Yükleniyor...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auth -->
+    <div id="page-auth" class="page">
+      <div class="ph"><div><h1>WhatsApp Bağlantı</h1><p>QR kodu taratarak bağlanın</p></div></div>
+      <div class="card" style="max-width:480px;margin:0 auto">
+        <div class="qr-wrap">
+          <div id="qr-box"></div>
+          <div class="qr-ph" id="qr-ph">
+            <div class="qr-ph-icon">▣</div>
+            <div class="qr-ph-txt">"Bağlan" butonuna tıklayın</div>
+          </div>
+          <div id="qr-loading" style="display:none;text-align:center">
+            <div class="qr-spinner"></div>
+            <div class="qr-ph-txt" style="margin-top:14px">Chrome başlatılıyor, QR hazırlanıyor...</div>
+            <div class="qr-ph-txt" style="margin-top:6px;font-size:10px;color:var(--t3)">İlk açılışta 15–30 saniye sürebilir</div>
+          </div>
+          <div id="qr-ok">
+            <div class="qr-ok-icon">✓</div>
+            <div class="qr-ok-txt">Bağlantı Kuruldu</div>
+          </div>
+          <div class="qr-hint">Telefon → WhatsApp → Bağlı Cihazlar → Cihaz Bağla</div>
+          <div class="qr-btns">
+            <button class="btn btn-p" onclick="connectWA()">⬡ Bağlan</button>
+            <button class="btn btn-d" onclick="disconnectWA()">Çıkış Yap</button>
+            <button class="btn btn-g" onclick="restartWA()">↺ Yeniden Başlat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contacts -->
+    <div id="page-contacts" class="page">
+      <div class="ph">
+        <div><h1>Kişiler</h1><p id="contact-count-label">Yükleniyor...</p></div>
+        <div class="ph-r">
+          <button class="btn btn-d sm" onclick="deleteAllContacts()">✕ Tümünü Sil</button>
+        </div>
+      </div>
+
+      <div class="card mb14">
+        <div class="card-hd"><span class="card-ttl">Excel / CSV İçe Aktar</span></div>
+        <div class="upz" id="upload-zone" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="uploadContacts(this)"/>
+          <div class="up-icon">⬆</div>
+          <div class="up-ttl">Dosyayı sürükleyin veya tıklayın</div>
+          <div class="up-sub">Excel / CSV · Sütunlar: telefon (zorunlu), isim (opsiyonel)</div>
+        </div>
+        <div id="import-result" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <div class="flex ic jb mb14">
+          <input class="fi" style="max-width:260px" placeholder="Telefon veya isim ara..." id="contact-search" oninput="debounce(loadContacts,400)()"/>
+        </div>
+        <div class="twrap">
+          <table>
+            <thead><tr><th>Telefon</th><th>İsim</th><th>Kaynak</th><th>Eklenme</th><th></th></tr></thead>
+            <tbody id="contacts-body">
+              <tr><td colspan="5" style="text-align:center;color:var(--t3)">Yükleniyor...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager" id="contacts-pager"></div>
+      </div>
+    </div>
+
+    <!-- Send -->
+    <div id="page-send" class="page">
+      <div class="ph"><div><h1>Mesaj Gönder</h1><p>Tekli veya hızlı gönderim</p></div></div>
+      <div class="card" style="max-width:540px">
+        <div id="send-alert"></div>
+        <div class="fg">
+          <label class="fl">Telefon Numarası</label>
+          <input class="fi" id="send-phone" placeholder="+905551234567 veya 05551234567"/>
+        </div>
+        <div class="fg">
+          <label class="fl">Mesaj</label>
+          <textarea class="fta" id="send-text" placeholder="Mesajınızı yazın..."></textarea>
+        </div>
+        <div class="fg">
+          <label class="fl">Fotoğraf / Medya (opsiyonel)</label>
+          <div class="upz" id="media-zone" onclick="document.getElementById('media-input').click()" style="padding:16px">
+            <input type="file" id="media-input" accept="image/*,video/*" onchange="previewMedia(this)"/>
+            <div id="media-preview-wrap">
+              <div class="up-icon" style="font-size:22px">📎</div>
+              <div class="up-sub">Fotoğraf veya video seç (opsiyonel)</div>
+            </div>
+          </div>
+        </div>
+        <div class="frow">
+          <div class="fg">
+            <label class="fl">Min Gecikme (ms)</label>
+            <input class="fi" id="send-min" type="number" value="30000"/>
+            <div class="fhint">30000 = 30 saniye</div>
+          </div>
+          <div class="fg">
+            <label class="fl">Maks Gecikme (ms)</label>
+            <input class="fi" id="send-max" type="number" value="60000"/>
+          </div>
+        </div>
+        <button class="btn btn-p" onclick="sendSingle()">↑ Kuyruğa Ekle</button>
+      </div>
+    </div>
+
+    <!-- Campaigns -->
+    <div id="page-campaigns" class="page">
+      <div class="ph">
+        <div><h1>Kampanyalar</h1><p>Toplu ve zamanlanmış gönderimler</p></div>
+        <div class="ph-r">
+          <button class="btn btn-p sm" onclick="openCampModal()">+ Yeni Kampanya</button>
+        </div>
+      </div>
+      <div id="campaigns-list"></div>
+      <div class="pager" id="campaigns-pager"></div>
+    </div>
+
+    <!-- Logs -->
+    <div id="page-logs" class="page">
+      <div class="ph">
+        <div><h1>Kayıtlar</h1><p>Sistem aktivite günlüğü</p></div>
+        <div class="ph-r flex g8">
+          <select class="fs" style="width:110px" id="log-level" onchange="loadLogs()">
+            <option value="">Tüm Seviyeler</option>
+            <option value="info">Bilgi</option>
+            <option value="warn">Uyarı</option>
+            <option value="error">Hata</option>
+          </select>
+          <select class="fs" style="width:120px" id="log-ctx" onchange="loadLogs()">
+            <option value="">Tüm Bağlamlar</option>
+            <option value="whatsapp">whatsapp</option>
+            <option value="queue">queue</option>
+            <option value="scheduler">scheduler</option>
+            <option value="api">api</option>
+            <option value="anti-ban">anti-ban</option>
+          </select>
+          <button class="btn btn-d sm" onclick="clearLogs()">✕ Temizle</button>
+          <button class="btn btn-g sm" onclick="loadLogs()">↻</button>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div id="log-entries" style="max-height:580px;overflow-y:auto"></div>
+      </div>
+      <div class="pager" id="logs-pager"></div>
+    </div>
+
+    <!-- Settings -->
+    <div id="page-settings" class="page">
+      <div class="ph"><div><h1>Ayarlar</h1><p>Gönderim limitleri ve zamanlama</p></div></div>
+      <div class="card" style="max-width:480px">
+        <div id="settings-alert"></div>
+        <div class="fg">
+          <label class="fl">Günlük Mesaj Limiti</label>
+          <input class="fi" id="s-daily-limit" type="number"/>
+          <div class="fhint">Isınma modu açıksa bu değer yok sayılır</div>
+        </div>
+        <div class="frow">
+          <div class="fg">
+            <label class="fl">Min Gecikme (ms)</label>
+            <input class="fi" id="s-min-delay" type="number"/>
+          </div>
+          <div class="fg">
+            <label class="fl">Maks Gecikme (ms)</label>
+            <input class="fi" id="s-max-delay" type="number"/>
+          </div>
+        </div>
+        <div class="fg">
+          <label class="fl">Isınma Modu</label>
+          <select class="fs" id="s-warmup-enabled">
+            <option value="true">Açık — Kademeli limit artışı</option>
+            <option value="false">Kapalı — Sabit limit kullan</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label class="fl">Isınma Günü (1–14)</label>
+          <input class="fi" id="s-warmup-day" type="number" min="1" max="14"/>
+          <div class="fhint" id="s-warmup-hint"></div>
+        </div>
+        <button class="btn btn-p" onclick="saveSettings()">Kaydet</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Campaign Modal -->
+<div class="overlay hidden" id="camp-modal">
+  <div class="modal">
+    <div class="mh">
+      <div class="mt">Yeni Kampanya</div>
+      <button class="mc" onclick="closeCampModal()">×</button>
+    </div>
+    <div id="camp-modal-alert"></div>
+    <div class="fg">
+      <label class="fl">Kampanya Adı</label>
+      <input class="fi" id="cm-name" placeholder="örn: Mart 2025 Promosyonu"/>
+    </div>
+    <div class="fg">
+      <label class="fl">Tür</label>
+      <select class="fs" id="cm-type" onchange="toggleSchField()">
+        <option value="bulk">Toplu — Tüm kişilere hemen gönder</option>
+        <option value="scheduled">Zamanlanmış — Belirli saatte gönder</option>
+      </select>
+    </div>
+    <div class="fg" id="cm-sch-grp" style="display:none">
+      <label class="fl">Zamanlama</label>
+      <input class="fi" id="cm-scheduled-at" type="datetime-local"/>
+    </div>
+    <div class="fg">
+      <label class="fl">Mesaj</label>
+      <textarea class="fta" id="cm-text" placeholder="Mesajınızı yazın..."></textarea>
+    </div>
+    <div class="frow">
+      <div class="fg">
+        <label class="fl">Min Gecikme (ms)</label>
+        <input class="fi" id="cm-min" type="number" value="30000"/>
+      </div>
+      <div class="fg">
+        <label class="fl">Maks Gecikme (ms)</label>
+        <input class="fi" id="cm-max" type="number" value="60000"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+      <button class="btn btn-g" onclick="closeCampModal()">İptal</button>
+      <button class="btn btn-p" onclick="createCampaign()">Oluştur ve Başlat</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
